@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const uri = process.env.MONGODB_URI;
+const uri = process.env.MONGO_DB_URI;
 
 
 app.get('/', (req, res) => {
@@ -46,8 +46,35 @@ async function run() {
       req.query.companyId && (query.companyId = req.query.companyId);
       req.query.status && (query.status = req.query.status);
       req.query.isRemote && (query.isRemote = req.query.isRemote === 'true');
+      if (req.query.search) {
+        const searchRegex = { $regex: req.query.search, $options: 'i' };
+        query.$or = [
+          { title: searchRegex },
+          { category: searchRegex },
+          { type: searchRegex },
+          { city: searchRegex },
+          { country: searchRegex }
+        ];
+        if (req.query.search.toLowerCase().includes('remote')) {
+          query.$or.push({ isRemote: true });
+        }
+      }
       const jobs = await jobsCollection.find(query).toArray();
       res.send(jobs);
+    });
+    // Get single job by ID
+    app.get('/api/jobs/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const job = await jobsCollection.findOne(query);
+        if (!job) {
+          return res.status(404).send({ error: "Job not found" });
+        }
+        res.send(job);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to fetch job" });
+      }
     });
     app.put('/api/jobs/:id', async (req, res) => {
       const id = req.params.id;
@@ -75,6 +102,11 @@ async function run() {
       }
       const result = await companiesCollection.insertOne(newCompany);
       res.send(result);
+    });
+    app.get(`/api/companies`, async (req, res) => {
+      const query = {};
+      const companies = await companiesCollection.find(query).toArray();
+      res.send(companies);
     });
     app.get(`/api/companies/:id`, async (req, res) => {
       const userId = req.params.id;
